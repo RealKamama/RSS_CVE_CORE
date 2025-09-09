@@ -1,0 +1,19 @@
+services:
+  collector:
+    # Baut das Image aus dem lokalen 'collector'-Ordner
+    build: ./collector
+    # Startet den Container neu, falls er stoppt
+    restart: unless-stopped
+    # Lädt die Umgebungsvariablen aus der .env-Datei
+    env_file:
+      - .env
+    # Weist den Container dem 'demo'-Netzwerk zu
+    networks:
+      - demo
+
+# Definiert das Netzwerk, mit dem wir uns verbinden wollen
+networks:
+  demo:
+    # Sagt Docker Compose: "Dieses Netzwerk existiert bereits,
+    # versuche nicht, ein neues zu erstellen."
+    external: true
