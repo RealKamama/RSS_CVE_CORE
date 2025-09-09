@@ -9,7 +9,14 @@ from psycopg2.extras import Json, execute_values
 from datetime import datetime, timezone
 
 # --- Logging Konfiguration ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Erstellt einen Logger mit einem benutzerdefinierten Format für bessere Lesbarkeit.
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+if not log.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
 
 # --- Konfiguration aus Umgebungsvariablen laden ---
 DB_NAME = os.getenv('POSTGRES_DB')
@@ -27,10 +34,11 @@ if not RSS_FEEDS or RSS_FEEDS == ['']:
         "https://wid.cert-bund.de/content/public/securityAdvisory/rss",
         "https://www.heise.de/security/rss/news-atom.xml"
     ]
-    logging.warning("Keine RSS_FEEDS in .env gefunden. Verwende Standard-Feeds.")
+    log.warning("Keine RSS_FEEDS in .env gefunden. Verwende Standard-Feeds.")
 
 def connect_to_db():
     """Stellt eine Verbindung zur PostgreSQL-Datenbank her."""
+    log.info("Versuche, eine Verbindung zur Datenbank aufzubauen...")
     conn = None
     retries = 10
     while retries > 0 and conn is None:
@@ -41,17 +49,18 @@ def connect_to_db():
                 password=DB_PASSWORD,
                 host=DB_HOST
             )
-            logging.info("Erfolgreich mit der Datenbank verbunden.")
+            log.info(">>> Erfolgreich mit der Datenbank verbunden.")
             return conn
         except psycopg2.OperationalError as e:
-            logging.warning(f"Datenbankverbindung fehlgeschlagen. Versuche es in 5 Sekunden erneut... ({retries} Versuche übrig)")
+            log.warning(f"Datenbankverbindung fehlgeschlagen. Versuche es in 5 Sekunden erneut... ({retries} Versuche übrig)")
             retries -= 1
             time.sleep(5)
-    logging.error("Konnte keine Verbindung zur Datenbank herstellen. Beende.")
+    log.error("!!! Konnte keine Verbindung zur Datenbank herstellen. Beende.")
     return None
 
 def create_tables_if_not_exist(conn):
     """Erstellt alle notwendigen Tabellen für die erweiterte Datenextraktion."""
+    log.info("Prüfe und erstelle Datenbanktabellen, falls nicht vorhanden...")
     with conn.cursor() as cur:
         # Phase 1
         cur.execute("""
@@ -122,7 +131,8 @@ def create_tables_if_not_exist(conn):
             );
         """)
         conn.commit()
-        logging.info("Alle Tabellen (inkl. products, severities) sind bereit.")
+    log.info(">>> Datenbankschema ist bereit.")
+
 
 def get_or_create_feed(cur, feed_url):
     """Holt oder erstellt einen Feed-Eintrag und gibt dessen ID zurück."""
@@ -175,14 +185,21 @@ def process_feeds(conn):
     for feed_url in RSS_FEEDS:
         if not feed_url: continue
         
-        logging.info(f"Verarbeite Feed: {feed_url}")
+        log.info(f"--- Verarbeitung von Feed gestartet: {feed_url} ---")
         try:
             feed = feedparser.parse(feed_url)
             if feed.bozo:
-                logging.warning(f"Feed {feed_url} ist möglicherweise fehlerhaft: {feed.bozo_exception}")
+                log.warning(f"Feed {feed_url} ist möglicherweise fehlerhaft: {feed.bozo_exception}")
             
-            logging.info(f"Feed '{feed.feed.get('title', 'Unbekannter Titel')}' hat {len(feed.entries)} Einträge gefunden.")
+            feed_title = feed.feed.get('title', 'Unbekannter Titel')
+            num_entries = len(feed.entries)
+            log.info(f"  [Parse] Feed '{feed_title}' enthält {num_entries} Einträge.")
             
+            if num_entries == 0:
+                log.info(f"  [Info] Feed enthält keine Einträge, Verarbeitung wird übersprungen.")
+                log.info(f"--- Verarbeitung von Feed beendet: {feed_url} ---\n")
+                continue
+
             with conn.cursor() as cur:
                 feed_id = get_or_create_feed(cur, feed_url)
                 
@@ -199,7 +216,8 @@ def process_feeds(conn):
                     ))
                 
                 if not new_vulnerabilities_data:
-                    logging.info(f"Keine neuen Einträge im Feed {feed_url}.")
+                    log.info(f"  [DB] Keine Einträge im Feed {feed_url} gefunden, die in die DB eingefügt werden müssen.")
+                    log.info(f"--- Verarbeitung von Feed beendet: {feed_url} ---\n")
                     continue
                     
                 insert_query = """
@@ -207,11 +225,16 @@ def process_feeds(conn):
                     VALUES %s ON CONFLICT (entry_id) DO NOTHING RETURNING id, entry_id;
                 """
                 inserted_rows = execute_values(cur, insert_query, new_vulnerabilities_data, fetch=True)
-                logging.info(f"{len(inserted_rows)} neue Schwachstellen eingefügt.")
+                log.info(f"  [DB] {len(inserted_rows)} neue Schwachstellen in 'vulnerabilities' eingefügt.")
                 
-                if not inserted_rows: continue
+                if not inserted_rows:
+                    log.info(f"  [Info] Keine neuen Einträge nach Konfliktprüfung, Anreicherung wird übersprungen.")
+                    conn.commit() # Wichtig, um last_polled_ts trotzdem zu aktualisieren
+                    log.info(f"--- Verarbeitung von Feed beendet: {feed_url} ---\n")
+                    continue
                     
                 # --- Anreicherung für die neu eingefügten Einträge ---
+                log.info("  [Enrich] Starte Anreicherung für neue Einträge (CVEs, Produkte, Schweregrade)...")
                 all_cves, all_products, all_severities = set(), set(), set()
                 vuln_relations = [] # Sammelt alle Relationen
 
@@ -233,13 +256,18 @@ def process_feeds(conn):
                         'products': found_products,
                         'severity': found_severity
                     })
+                
+                log.info(f"  [Enrich] Extraktion abgeschlossen. Gefunden: {len(all_cves)} CVEs, {len(all_products)} Produkte, {len(all_severities)} Schweregrade.")
 
                 # --- Batch-Insert für alle gefundenen Entitäten ---
                 if all_cves:
+                    log.info(f"    -> [DB] Füge {len(all_cves)} eindeutige CVEs in 'cves' Tabelle ein...")
                     execute_values(cur, "INSERT INTO cves (cve_id) VALUES %s ON CONFLICT (cve_id) DO NOTHING;", [(c,) for c in all_cves])
                 if all_products:
+                    log.info(f"    -> [DB] Füge {len(all_products)} eindeutige Produkte in 'products' Tabelle ein...")
                     execute_values(cur, "INSERT INTO products (product_name) VALUES %s ON CONFLICT (product_name) DO NOTHING;", [(p,) for p in all_products])
                 if all_severities:
+                    log.info(f"    -> [DB] Füge {len(all_severities)} eindeutige Schweregrade in 'severities' Tabelle ein...")
                     execute_values(cur, "INSERT INTO severities (severity_level) VALUES %s ON CONFLICT (severity_level) DO NOTHING;", [(s,) for s in all_severities])
 
                 # --- Verknüpfungen erstellen ---
@@ -267,30 +295,35 @@ def process_feeds(conn):
                     if rel['severity'] and severity_map.get(rel['severity']):
                         sev_rel_data.append((rel['id'], severity_map[rel['severity']]))
                 
+                log.info("  [Link] Erstelle Verknüpfungen zwischen Schwachstellen und extrahierten Daten...")
                 if cve_rel_data:
                     execute_values(cur, "INSERT INTO vulnerability_cves (vulnerability_id, cve_id) VALUES %s ON CONFLICT DO NOTHING;", cve_rel_data)
-                    logging.info(f"{len(cve_rel_data)} CVE-Verknüpfungen erstellt.")
+                    log.info(f"    -> [DB] {len(cve_rel_data)} CVE-Verknüpfungen erstellt.")
                 if prod_rel_data:
                     execute_values(cur, "INSERT INTO vulnerability_products (vulnerability_id, product_id) VALUES %s ON CONFLICT DO NOTHING;", prod_rel_data)
-                    logging.info(f"{len(prod_rel_data)} Produkt-Verknüpfungen erstellt.")
+                    log.info(f"    -> [DB] {len(prod_rel_data)} Produkt-Verknüpfungen erstellt.")
                 if sev_rel_data:
                     execute_values(cur, "INSERT INTO vulnerability_severities (vulnerability_id, severity_id) VALUES %s ON CONFLICT DO NOTHING;", sev_rel_data)
-                    logging.info(f"{len(sev_rel_data)} Schweregrad-Verknüpfungen erstellt.")
+                    log.info(f"    -> [DB] {len(sev_rel_data)} Schweregrad-Verknüpfungen erstellt.")
                     
                 conn.commit()
-            logging.info(f"Feed {feed_url} erfolgreich verarbeitet.")
+            log.info(f"--- Verarbeitung von Feed erfolgreich beendet: {feed_url} ---\n")
 
         except Exception as e:
-            logging.error(f"Ein schwerwiegender Fehler bei der Verarbeitung von {feed_url} ist aufgetreten: {e}", exc_info=True)
+            log.error(f"!!! Ein schwerwiegender Fehler bei der Verarbeitung von {feed_url} ist aufgetreten: {e}", exc_info=True)
             conn.rollback()
 
 if __name__ == "__main__":
+    log.info("==================================================")
+    log.info("=== RSS Vulnerability Collector gestartet      ===")
+    log.info("==================================================")
     conn = connect_to_db()
     if conn:
         create_tables_if_not_exist(conn)
         
         while True:
+            log.info(">>> Starte neuen Verarbeitungszyklus für alle Feeds...")
             process_feeds(conn)
-            logging.info(f"Alle Feeds verarbeitet. Nächster Durchlauf in {POLL_INTERVAL} Sekunden.")
+            log.info(f"<<< Zyklus beendet. Warte {POLL_INTERVAL} Sekunden auf den nächsten Durchlauf.")
+            log.info("--------------------------------------------------\n")
             time.sleep(POLL_INTERVAL)
-
