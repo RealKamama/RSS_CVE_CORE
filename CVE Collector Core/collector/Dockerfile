@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Kopieren des restlichen Quellcodes in den Container
-COPY . .
+COPY collector.py .
 
 # Der Befehl, der beim Starten des Containers ausgeführt wird
 CMD ["python", "collector.py"]

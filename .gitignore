@@ -1,2 +1,3 @@
 CVE Collector Core/.env
 CVE Collector Core/collector/linker.py
+CVE Collector Core/collector/.env
