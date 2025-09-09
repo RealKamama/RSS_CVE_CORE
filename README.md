@@ -1,8 +1,4 @@
-Sicher, hier ist der Inhalt im Markdown-Format, bereit für Ihre `README.md`-Datei.
-
-# `<PROJEKT-TITEL>`: Automatisierter RSS/Atom-Feed-Aggregator für PostgreSQL
-
-\!([https://img.shields.io/badge/build-passing-brightgreen](https://www.google.com/search?q=https://img.shields.io/badge/build-passing-brightgreen))
+# Automatisierter RSS/Atom-Feed-Aggregator für PostgreSQL
 
 ## 1.0 Übersicht
 
@@ -190,20 +186,7 @@ Führen Sie die folgenden Schritte auf Ihrem Produktionsserver (oder in Ihrem Do
 4.  **Aktualisieren Sie Ihre `requirements.txt`:**
     Ersetzen Sie in Ihrer `requirements.txt`-Datei die Zeile `psycopg2-binary` durch `psycopg2`. Dies stellt sicher, dass bei zukünftigen Deployments die korrekte Version installiert wird.
 
-## 9.0 Projektstruktur
-
-Die folgende Darstellung zeigt die empfohlene Verzeichnis- und Dateistruktur für dieses Projekt. Eine klare Struktur erleichtert die Navigation und das Verständnis der Codebasis.
-
-```
-.
-├── venv/                   # Virtuelle Python-Umgebung (sollte in.gitignore sein)
-├──.env                    # Lokale Konfigurationsdatei für Umgebungsvariablen (muss in.gitignore sein)
-├── main.py                 # Hauptanwendungsskript, das die ETL-Logik enthält (Platzhalter)
-├── requirements.txt        # Liste der Python-Abhängigkeiten für pip
-└── README.md               # Diese Dokumentationsdatei
-```
-
-## 10.0 Fehlerbehebung
+## 9.0 Fehlerbehebung
 
 Dieser Abschnitt behandelt häufig auftretende Probleme und bietet Lösungsansätze. Die meisten Fehler bei der Ersteinrichtung sind auf Konfigurations- oder Umgebungsprobleme zurückzuführen.
 
@@ -214,7 +197,7 @@ Dieser Abschnitt behandelt häufig auftretende Probleme und bietet Lösungsansä
 | Das Skript läuft durch, aber es werden keine Feeds verarbeitet oder Daten in die Datenbank geschrieben. | 1. Die URLs in der `FEED_URLS`-Variable sind ungültig oder fehlerhaft formatiert. \<br\> 2. Ein Netzwerkproblem (z.B. Proxy, Firewall) verhindert den Zugriff auf die Feed-URLs. \<br\> 3. Die Feeds sind leer oder enthalten keine neuen Einträge. | 1. Überprüfen Sie jede URL in einem Webbrowser, um sicherzustellen, dass sie einen gültigen Feed zurückgibt. Achten Sie auf Tippfehler und das Fehlen von Leerzeichen um die Kommas. \<br\> 2. Stellen Sie sicher, dass der ausführende Host ausgehenden HTTP/HTTPS-Zugriff auf das Internet hat. \<br\> 3. Prüfen Sie den Inhalt der Feeds manuell. |
 | `ModuleNotFoundError: No module named 'psycopg2'` oder `... 'feedparser'` | 1. Die virtuelle Umgebung (`venv`) ist nicht aktiviert. \<br\> 2. Die Installation der Abhängigkeiten mit `pip install -r requirements.txt` ist fehlgeschlagen oder wurde übersprungen. | 1. Aktivieren Sie die virtuelle Umgebung mit `source venv/bin/activate` (macOS/Linux) oder `.\venv\Scripts\activate` (Windows). \<br\> 2. Führen Sie `pip install -r requirements.txt` erneut in der aktivierten Umgebung aus und prüfen Sie auf Fehlermeldungen. |
 
-## 11.0 Beitrag
+## 10.0 Beitrag
 
 Beiträge zur Verbesserung dieses Projekts sind herzlich willkommen. Wenn Sie einen Fehler finden oder eine neue Funktion vorschlagen möchten, gehen Sie bitte wie folgt vor:
 
@@ -225,10 +208,3 @@ Beiträge zur Verbesserung dieses Projekts sind herzlich willkommen. Wenn Sie ei
 5.  Öffnen Sie einen **Pull Request** gegen den `main`-Branch des ursprünglichen Repositories.
 
 Für größere Änderungen oder konzeptionelle Vorschläge öffnen Sie bitte zuerst ein **Issue**, um die Idee zu diskutieren.
-
-## 12.0 Lizenz
-
-Dieses Projekt ist unter der **MIT-Lizenz** lizenziert. Eine Kopie der Lizenz finden Sie in der `LICENSE`-Datei im Stammverzeichnis des Repositories. Die MIT-Lizenz ist eine permissive Open-Source-Lizenz, die eine breite Wiederverwendung der Software ermöglicht.
-
-```
-```
