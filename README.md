@@ -54,9 +54,9 @@ Bevor Sie mit der Installation beginnen, stellen Sie bitte sicher, dass die folg
 ## 5.0 Installation und Einrichtung
 Ich nutze **Docker**.
 
-    ```bash
-    docker-compose up --build -d
-    ```
+```bash
+docker-compose up --build -d
+```
 
 Nach Abschluss dieser Schritte ist die Anwendung installiert und bereit für die Konfiguration.
 
