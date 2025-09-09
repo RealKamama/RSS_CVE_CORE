@@ -52,42 +52,10 @@ Bevor Sie mit der Installation beginnen, stellen Sie bitte sicher, dass die folg
   * **Git:** Das Versionskontrollsystem Git wird benötigt, um den Quellcode des Projekts aus dem Repository zu klonen.
 
 ## 5.0 Installation und Einrichtung
+Ich nutze **Docker**.
 
-Folgen Sie diesen Schritten, um das Projekt auf Ihrem lokalen System einzurichten. Die Verwendung einer virtuellen Umgebung wird dringend empfohlen, um eine saubere und isolierte Installation der Projektabhängigkeiten zu gewährleisten und Konflikte mit anderen Python-Projekten zu vermeiden.
-
-1.  **Repository klonen:**
-    Öffnen Sie ein Terminal oder eine Kommandozeile und klonen Sie das Repository an einen geeigneten Ort auf Ihrem System. Wechseln Sie anschließend in das neu erstellte Projektverzeichnis.bash
-    git clone \<URL\_DES\_REPOSITORIES\>
-    cd \<PROJEKT-VERZEICHNIS\>
-    ```
-    
-    ```
-2.  **Virtuelle Umgebung erstellen und aktivieren:**
-    Erstellen Sie eine virtuelle Python-Umgebung im Projektverzeichnis. Der Name `venv` ist eine gängige Konvention.
     ```bash
-    # Für macOS/Linux
-    python3 -m venv venv
-    ```
-    ```bash
-    # Für Windows
-    python -m venv venv
-    ```
-    Aktivieren Sie anschließend die erstellte Umgebung. Ihre Terminal-Eingabeaufforderung sollte sich ändern und den Namen der Umgebung anzeigen.
-    ```bash
-    # Für macOS/Linux
-    source venv/bin/activate
-    ```
-    ```bash
-    # Für Windows
-    ```
-
-.\\venv\\Scripts\\activate
-\`\`\`
-
-3.  **Abhängigkeiten installieren:**
-    Installieren Sie alle für das Projekt erforderlichen Python-Pakete mit `pip` und der bereitgestellten `requirements.txt`-Datei.[10] Dieser Befehl installiert `feedparser` und `psycopg2-binary` sowie deren jeweilige Abhängigkeiten in Ihrer aktiven virtuellen Umgebung.
-    ```bash
-    pip install -r requirements.txt
+    docker-compose up --build -d
     ```
 
 Nach Abschluss dieser Schritte ist die Anwendung installiert und bereit für die Konfiguration.
