@@ -1,2 +1,4 @@
 collector/.env
-
+viewer/.env
+.env
+/.env
