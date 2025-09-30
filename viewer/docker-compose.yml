@@ -1,0 +1,21 @@
+services:
+  # 1. Service: Deine Web-Anwendung
+  web:
+    build: .
+    container_name: vulnerability_dashboard_web
+    ports:
+      # Leitet Port 5000 vom Container auf deinen Computer weiter
+      - "${FLASK_PORT}:5000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    # Weist den Container dem unten definierten Netzwerk zu
+    networks:
+      - demo
+
+networks:
+  demo:
+    # Sagt Docker Compose: "Dieses Netzwerk existiert bereits,
+    # versuche nicht, ein neues zu erstellen."
+    external: true
