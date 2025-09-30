@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        @import url('https://rsms.me/inter/inter.css');
+        .tag { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 500; margin: 0.125rem; white-space: nowrap; }
+        .pagination-btn { padding: 0.5rem 1rem; border: 1px solid #d1d5db; border-radius: 0.375rem; background-color: white; transition: background-color 0.2s; }
+        .pagination-btn:hover:not(:disabled) { background-color: #f9fafb; }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .sortable-header { cursor: pointer; user-select: none; }
+        .sortable-header:hover { background-color: #e5e7eb; /* gray-200 */ }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Vulnerability Dashboard</h1>
+            <p class="text-lg text-gray-600 mt-2">Eine interaktive Übersicht aller gesammelten Sicherheitsschwachstellen.</p>
+        </header>
+
+        <div class="bg-white p-4 rounded-lg shadow-md mb-6 sticky top-4 z-10">
+            <input type="text" id="searchInput" placeholder="Suche nach Titel, Publisher..."
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+        </div>
+
+        <div id="loading" class="text-center text-gray-500 my-8">
+            <p>Lade Daten aus der Datenbank...</p>
+        </div>
+        
+        <div id="content-wrapper" class="hidden">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-4">
+                <p id="entryCount" class="text-sm text-gray-600"></p>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <label for="limitSelect" class="text-sm text-gray-600">Zeige:</label>
+                        <select id="limitSelect" class="p-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500">
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div id="pagination-controls-top"></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead id="table-header" class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable-header" data-sort="publisher">
+                                <span>Publisher & Datum</span> <span class="sort-indicator"></span>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <span>Titel / Zusammenfassung</span>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable-header" data-sort="severity">
+                                <span>Schweregrad</span> <span class="sort-indicator"></span>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <span>Produkte & CVEs</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="vulnerability-table" class="bg-white divide-y divide-gray-200"></tbody>
+                </table>
+                <div id="no-results" class="text-center p-8 text-gray-500 hidden">
+                    <p>Keine Einträge für deine Suche gefunden.</p>
+                </div>
+            </div>
+            
+            <div class="flex justify-between items-center mt-4">
+                <p id="page-info-bottom" class="text-sm text-gray-600"></p>
+                <div id="pagination-controls-bottom"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="details-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-full overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-start">
+                    <h2 id="modal-title" class="text-2xl font-bold text-gray-900">Lade Details...</h2>
+                    <button id="modal-close-btn" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                </div>
+                <div id="modal-content" class="mt-4 space-y-4 text-gray-700">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM-Elemente ---
+        const tableBody = document.getElementById('vulnerability-table');
+        const searchInput = document.getElementById('searchInput');
+        const limitSelect = document.getElementById('limitSelect');
+        const loadingIndicator = document.getElementById('loading');
+        const contentWrapper = document.getElementById('content-wrapper');
+        const entryCount = document.getElementById('entryCount');
+        const noResults = document.getElementById('no-results');
+        const paginationControlsTop = document.getElementById('pagination-controls-top');
+        const paginationControlsBottom = document.getElementById('pagination-controls-bottom');
+        const pageInfoBottom = document.getElementById('page-info-bottom');
+        const tableHeader = document.getElementById('table-header');
+        const modal = document.getElementById('details-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        // --- Anwendungszustand ---
+        let state = {
+            currentPage: 1,
+            itemsPerPage: 20,
+            searchTerm: '',
+            sortBy: 'date',
+            sortOrder: 'desc',
+            totalItems: 0,
+            totalPages: 0,
+        };
+        let searchTimeout;
+
+        // --- Hilfsfunktionen ---
+        const getSeverityClass = (level) => {
+            if (!level) return 'bg-gray-200 text-gray-800';
+            switch (level.toLowerCase()) {
+                case 'critical': return 'bg-red-600 text-white';
+                case 'high': return 'bg-orange-500 text-white';
+                case 'moderate': return 'bg-yellow-400 text-gray-900';
+                case 'low': return 'bg-blue-200 text-blue-900';
+                default: return 'bg-gray-200 text-gray-800';
+            }
+        };
+        const createTag = (text, colorClass) => `<span class="tag ${colorClass}">${text}</span>`;
+        const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleString('de-DE') : 'N/A';
+
+        // --- Rendering ---
+        const renderTable = (items) => {
+            tableBody.innerHTML = '';
+            noResults.classList.toggle('hidden', items.length > 0);
+            items.forEach(vuln => {
+                const publisherName = vuln.feed_publisher || (vuln.feed_url ? new URL(vuln.feed_url).hostname.replace(/^www\./, '') : 'Unbekannt');
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors cursor-pointer';
+                row.dataset.id = vuln.id;
+                row.innerHTML = `
+                    <td class="px-6 py-4 align-top whitespace-nowrap">
+                        <div class="text-sm font-semibold text-gray-900">${publisherName}</div>
+                        <div class="text-xs text-gray-500">${formatDate(vuln.published_ts)}</div>
+                    </td>
+                    <td class="px-6 py-4 align-top max-w-lg">
+                        <a href="${vuln.link}" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-blue-600 hover:underline break-words">${vuln.title}</a>
+                        <p class="text-sm text-gray-600 mt-1 break-words">${vuln.summary ? vuln.summary.substring(0, 150) + '...' : ''}</p>
+                    </td>
+                    <td class="px-6 py-4 align-top">${vuln.severity_level ? createTag(vuln.severity_level, getSeverityClass(vuln.severity_level)) : 'N/A'}</td>
+                    <td class="px-6 py-4 align-top">
+                        <div class="flex flex-wrap">
+                            ${vuln.products.map(p => createTag(p, 'bg-green-100 text-green-800')).join('')}
+                            ${vuln.cves.map(cve => createTag(cve, 'bg-purple-100 text-purple-800')).join('')}
+                        </div>
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+        };
+        const renderPagination = () => {
+            const { currentPage, totalPages, totalItems, itemsPerPage } = state;
+            const startItem = (currentPage - 1) * itemsPerPage + 1;
+            const endItem = Math.min(startItem + itemsPerPage - 1, totalItems);
+            if (totalItems === 0) {
+                entryCount.textContent = "Keine Einträge gefunden.";
+                pageInfoBottom.textContent = "";
+                paginationControlsTop.innerHTML = "";
+                paginationControlsBottom.innerHTML = "";
+                return;
+            }
+            entryCount.textContent = `Zeige Einträge ${startItem}-${endItem} von ${totalItems}`;
+            pageInfoBottom.textContent = `Seite ${currentPage} von ${totalPages}`;
+            const controlsHTML = `<div class="flex space-x-2"><button class="pagination-btn" id="prev-page" ${currentPage === 1 ? 'disabled' : ''}>Zurück</button><button class="pagination-btn" id="next-page" ${currentPage === totalPages || totalPages === 0 ? 'disabled' : ''}>Weiter</button></div>`;
+            paginationControlsTop.innerHTML = controlsHTML;
+            paginationControlsBottom.innerHTML = controlsHTML;
+        };
+        const renderSortIndicators = () => {
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                const indicator = header.querySelector('.sort-indicator');
+                if (header.dataset.sort === state.sortBy) {
+                    indicator.textContent = state.sortOrder === 'asc' ? ' ▲' : ' ▼';
+                } else {
+                    indicator.textContent = '';
+                }
+            });
+        };
+        const populateModal = (data) => {
+            const publisherName = data.feed_publisher || (data.feed_url ? new URL(data.feed_url).hostname.replace(/^www\./, '') : 'Unbekannt');
+            modalTitle.textContent = data.title;
+            modalContent.innerHTML = `
+                <div><h3 class="font-semibold text-gray-800">Zusammenfassung</h3><p class="mt-1">${data.summary || 'Keine Zusammenfassung verfügbar.'}</p></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                    <div><h3 class="font-semibold text-gray-800">Publisher</h3><p>${publisherName}</p></div>
+                    <div><h3 class="font-semibold text-gray-800">Veröffentlicht am</h3><p>${formatDate(data.published_ts)}</p></div>
+                    <div><h3 class="font-semibold text-gray-800">Schweregrad</h3><div>${data.severity_level ? createTag(data.severity_level, getSeverityClass(data.severity_level)) : 'N/A'}</div></div>
+                    <div><h3 class="font-semibold text-gray-800">Originalquelle</h3><a href="${data.link}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline break-all">Link zur Meldung</a></div>
+                </div>
+                <div class="border-t pt-4"><h3 class="font-semibold text-gray-800">Betroffene Produkte</h3><div class="flex flex-wrap mt-1">${data.products.length > 0 ? data.products.map(p => createTag(p, 'bg-green-100 text-green-800')).join('') : 'N/A'}</div></div>
+                <div class="border-t pt-4"><h3 class="font-semibold text-gray-800">Zugehörige CVEs</h3><div class="flex flex-wrap mt-1">${data.cves.length > 0 ? data.cves.map(cve => createTag(cve, 'bg-purple-100 text-purple-800')).join('') : 'N/A'}</div></div>
+            `;
+        };
+        
+        // --- Datenlogik & Event-Handler ---
+        const fetchData = async (page = 1) => {
+            loadingIndicator.classList.remove('hidden');
+            contentWrapper.classList.add('hidden');
+            state.currentPage = page;
+            const { currentPage, itemsPerPage, searchTerm, sortBy, sortOrder } = state;
+            let url = `/api/vulnerabilities?page=${currentPage}&limit=${itemsPerPage}&sortBy=${sortBy}&order=${sortOrder}`;
+            if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                state.totalItems = data.total_items;
+                state.totalPages = Math.ceil(data.total_items / itemsPerPage);
+                renderTable(data.items);
+                renderPagination();
+                bindPaginationEvents();
+                renderSortIndicators();
+            } catch (error) {
+                contentWrapper.innerHTML = `<p class="text-red-500 text-center">Fehler beim Laden der Daten: ${error.message}</p>`;
+                console.error('Fetch error:', error);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                contentWrapper.classList.remove('hidden');
+            }
+        };
+        const openModal = async (id) => {
+            modal.classList.remove('hidden');
+            modalTitle.textContent = 'Lade Details...';
+            modalContent.innerHTML = '';
+            try {
+                const response = await fetch(`/api/vulnerabilities/${id}`);
+                if (!response.ok) throw new Error('Details konnten nicht geladen werden.');
+                const data = await response.json();
+                populateModal(data);
+            } catch (error) {
+                modalContent.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            }
+        };
+        const closeModal = () => modal.classList.add('hidden');
+        const bindPaginationEvents = () => {
+            document.querySelectorAll('#prev-page').forEach(btn => btn.addEventListener('click', () => fetchData(state.currentPage - 1)));
+            document.querySelectorAll('#next-page').forEach(btn => btn.addEventListener('click', () => fetchData(state.currentPage + 1)));
+        };
+
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                state.searchTerm = e.target.value;
+                fetchData(1);
+            }, 300);
+        });
+        limitSelect.addEventListener('change', (e) => {
+            state.itemsPerPage = parseInt(e.target.value, 10);
+            fetchData(1);
+        });
+        tableHeader.addEventListener('click', (e) => {
+            const header = e.target.closest('.sortable-header');
+            if (!header) return;
+            const newSortBy = header.dataset.sort;
+            if (state.sortBy === newSortBy) {
+                state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sortBy = newSortBy;
+                state.sortOrder = 'desc';
+            }
+            fetchData(1);
+        });
+        tableBody.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row && row.dataset.id) openModal(row.dataset.id);
+        });
+        modalCloseBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === "Escape" && !modal.classList.contains('hidden')) closeModal(); });
+
+        // --- Initialisierung ---
+        limitSelect.value = state.itemsPerPage;
+        fetchData();
+    });
+    </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 services:
   collector:
     # Baut das Image aus dem lokalen 'collector'-Ordner
-    build: ./collector
+    build: .
     # Startet den Container neu, falls er stoppt
     restart: unless-stopped
     # Lädt die Umgebungsvariablen aus der .env-Datei
